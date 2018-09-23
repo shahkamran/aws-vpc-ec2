@@ -1,25 +1,26 @@
 ---
-#vars/main.yml
- 
 aws_access_key: ""
 aws_secret_key: ""
-region: "eu-west-2"
- 
+region: "eu-west-1" #eu-west-2 is not supported by boto
+
 # VPC
 vpc_cidr: 10.10.0.0/24
 vpc_name: "Ansible VPC"
- 
+
 # Subnet
 subnet_name: "Ansible Subnet"
 subnet_cidr: 10.10.0.0/26
- 
+
 # Internet Gateway Name
 igw_name: "Ansible Traffic IGW"
- 
+
+# Routing Table Name 
+route_name: "Ansible Routing Table Name"
+
 securitygroup_name: "Ansible Security Group"
- 
+
 ec2_tag: "Ansible WebServer"
- 
+
 #The local path to which we would save our EC2 Private Key
 ec2_key_directory: "/home/ubuntu/"
-keypair_name: "aws-private.pem"
+keypair_name: "name-of-key-private.pem"
