@@ -1,38 +1,152 @@
-Role Name
+Creating AWS VPC, Subnet, Routing, Internet Gateway, Key Pair and Instance using Ansible playbooks
 =========
 
-A brief description of the role goes here.
+This is a working example of Ansible playbook that creates everything from VPC to EC2 instance on AWS.
 
 Requirements
 ------------
 
-Any pre-requisites that may not be covered by Ansible itself or the role should be mentioned here. For instance, if the role uses the EC2 module, it may be a good idea to mention in this section that the boto package is required.
+Have latest tools installed for Ansible. See the packages I had installed below.
 
-Role Variables
+python
+ansible
+python-boto
+awscli
+python-pip
+phhon3-pip
+python-boto3
+python-botocore
+
+Global Variables
 --------------
 
-A description of the settable variables for this role should go here, including any variables that are in defaults/main.yml, vars/main.yml, and any variables that can/should be set via parameters to the role. Any variables that are read from other roles and/or the global scope (ie. hostvars, group vars, etc.) should be mentioned here as well.
+All global variables are listed in ./group_vars/all/vars.
 
-Dependencies
+Tasks in roles
 ------------
 
-A list of other roles hosted on Galaxy should go here, plus any details in regards to parameters that may need to be set for other roles, or variables that are used from other roles.
+Playbook tasks are all listd in actions within roles ./roles/ec2-vpc-create/tasks/main.yml.
 
-Example Playbook
+Playbook
 ----------------
+The playbook actions are listed here for reference also.
 
-Including an example of how to use your role (for instance, with variables passed in as parameters) is always nice for users too:
+    ---
+    # tasks file for vpc-create
 
-    - hosts: servers
-      roles:
-         - { role: username.rolename, x: 42 }
+    - name: create VPC
+      ec2_vpc_net:
+        name: "{{ vpc_name }}"
+        cidr_block: "{{ vpc_cidr }}"
+        region: "{{ region }}"
+        state: present
+        aws_access_key: "{{ aws_access_key }}"
+        aws_secret_key: "{{ aws_secret_key }}"
+      register: vpc
+
+    - name: Report VPC variable output
+      debug:
+          msg: "{{ vpc.vpc.id }}"
+
+    #- name: Check VPC output
+    #  debug: msg="{{ vpc['vpc'.'id'] }}"
+
+    - name: associate subnet to the VPC
+      ec2_vpc_subnet:
+    #   vpc_id: "{{ vpc_id }}"
+       vpc_id: "{{ vpc.vpc.id }}"
+       region: "{{ region }}"
+       state: present
+       cidr: "{{ subnet_cidr }}"
+       aws_access_key: "{{ aws_access_key }}"
+       aws_secret_key: "{{ aws_secret_key }}"
+       map_public: yes
+       resource_tags:
+         Name: "{{ subnet_name }}"
+      register: subnet
+
+    - name: create IGW
+      ec2_vpc_igw:
+       vpc_id: "{{ vpc.vpc.id }}"
+       region: "{{ region }}"
+       state: present
+       aws_access_key: "{{ aws_access_key }}"
+       aws_secret_key: "{{ aws_secret_key }}"
+       tags:
+         Name: "{{ igw_name }}"
+      register: igw
+
+    - name: Route IGW
+      ec2_vpc_route_table:
+       vpc_id: "{{ vpc.vpc.id }}"
+       region: "{{ region }}"
+       state: present
+       aws_access_key: "{{ aws_access_key }}"
+       aws_secret_key: "{{ aws_secret_key }}"
+       subnets:
+         - "{{ subnet.subnet.id }}"
+       routes:
+         - dest: 0.0.0.0/0
+           gateway_id: "{{ igw.gateway_id  }}"
+       tags:
+         Name: "{{ route_name }}"
+
+    - name: Create Security Group
+      ec2_group:
+       name: Web DMZ
+       description: DMZ Security Group
+       vpc_id: "{{ vpc.vpc.id }}"
+       region: "{{ region }}"
+       state: present
+       aws_access_key: "{{ aws_access_key }}"
+       aws_secret_key: "{{ aws_secret_key }}"
+       rules:
+         - proto: tcp
+           ports:
+           - 80
+           cidr_ip: 0.0.0.0/0
+         - proto: tcp
+           ports:
+           - 22
+           cidr_ip: 0.0.0.0/0
+      register: security_group
+
+    - name: create a new ec2 key pair
+      ec2_key:
+       aws_access_key: "{{ aws_access_key }}"
+       aws_secret_key: "{{ aws_secret_key }}"
+       name: ec2_keypair
+       region: "{{ region }}"
+       state: present
+      register: keypair
+
+    - name: Copy EC2 Private Key locally so it can be later on used to SSH into the instance
+      copy: content= "{{ keypair.key.private_key }}" dest={{ ec2_key_directory }}key.ppk
+      when: keypair.changed == true
+
+    - name: Create EC2 server
+      ec2:
+       image: ami-00035f41c82244dab
+       wait: yes
+       instance_type: t2.micro
+       region: "{{ region }}"
+       state: prsent
+       group_id: "{{ security_group.group_id }}"
+       vpc_subnet_id: "{{ subnet.subnet.id }}"
+       key_name: "{{ keypair.key.name  }}"
+       instance_tags:
+         Name: AnsibleInstance
+       count_tag:
+         Name: apacheserver
+    #   exact_count: 1 # only enabled when state is off
+       aws_access_key: "{{ aws_access_key }}"
+       aws_secret_key: "{{ aws_secret_key }}"
 
 License
 -------
 
-BSD
+Open Source
 
-Author Information
+About Me
 ------------------
-
-An optional section for the role authors to include contact information, or a website (HTML is not allowed).
+See my blog at https://blog.kamranshah.com
